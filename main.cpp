@@ -9,9 +9,10 @@ long long mod = 1e9 + 7;
 int dx[4] = {1, 0, -1, 0};
 int dy[4] = {0, 1, 0, -1};
 #define debug 0
-#define debugWorkTime 0
+#define debugWorkTime 1
 #define debugWorkTimeMax 0
-#define debugWorkTimeAverage 1
+#define debugWorkTimeMin 1
+#define debugWorkTimeAverage 0
 #define useSample 0
 #define useTestDate 0
 vector<vector<int>> from(1010);
@@ -101,10 +102,18 @@ void setFinish(int i) {
       //今までの作業にかかった時間の最大値で更新
       // selectOrder[k].first = max(selectOrder[k].first, workingTime[i]);
 
+      //今までの作業にかかった時間の最小値で更新
+      if (selectOrder[k].first == 0.0)
+        selectOrder[k].first = (double)workingTime[i];
+      else {
+        selectOrder[k].first =
+            min(selectOrder[k].first, (double)workingTime[i]);
+      }
+
       //今までの作業にかかった時間の平均値で更新
-      selectOrder[k].first =
-          (double)(selectOrder[k].first * completedTask[i] + workingTime[i]) /
-          (completedTask[i] + 1.0);
+      //   selectOrder[k].first =
+      //       (double)(selectOrder[k].first * completedTask[i] +
+      //       workingTime[i]) / (completedTask[i] + 1.0);
       break;
     }
   }
@@ -176,7 +185,10 @@ void assignByFast(int m, int n) {
   rep(i, m) {
     int index = selectOrder[i].second;
 #if debugWorkTimeMax
-    printf("#s メンバー　%d の コストのは　%dです\n", index,
+    printf("#s メンバー　%d の 最大コストは　%dです\n", index,
+           selectOrder[i].first);
+#elif debugWorkTimeMin
+    printf("#s メンバー　%d の 最小コストは　%lfです\n", index,
            selectOrder[i].first);
 #elif debugWorkTimeAverage
     printf("#s メンバー　%d の コストのは　%lfです\n", index,
@@ -222,6 +234,8 @@ bool allTasksCompleted(int n) {
   }
   return true;
 }
+
+//現在のタスクの
 
 int main() {
   long long N, M, K, R;
