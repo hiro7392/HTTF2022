@@ -9,16 +9,19 @@ long long mod = 1e9 + 7;
 int dx[4] = {1, 0, -1, 0};
 int dy[4] = {0, 1, 0, -1};
 #define debug 0
-#define debugWorkTime 1
-#define debugWorkTimeMax 0
-#define debugWorkTimeMin 1
+#define debugWorkTime 0
+#define debugWorkTimeMax 1
+#define debugWorkTimeMin 0
 #define debugWorkTimeAverage 0
+#define debugWorkMember 0
 #define useSample 0
 #define useTestDate 0
+
 vector<vector<int>> from(1010);
 vector<vector<int>> to(1010);
 
 // skills[i][k]=メンバーi のスキルk
+
 long long skills[25][25];
 
 // timeToNeed[i][k]:=メンバーiがタスクkを終了するまでにかかる日数。
@@ -50,7 +53,7 @@ bool cmp(pair<double, int> p1, pair<double, int> p2) {
 }
 
 void makeSelectOrder(int m) {
-  rep(i, m) selectOrder[i] = make_pair(0, i);
+  rep(i, m) selectOrder[i] = make_pair(0.5, i);
   return;
 }
 
@@ -74,6 +77,15 @@ void makeTasks(int N, int K) {
   rep(i, N) {
     rep(l, K) { cin >> taskSkill[i][l]; }
   }
+}
+//ランダムな0〜nまでの数列を返す
+vector<int> getRandomVec(int n) {
+  vector<int> shuffle(n);
+  rep(i, n) shuffle[i] = i;
+  std::random_device seed_gen;
+  std::mt19937 engine(seed_gen());
+  std::shuffle(shuffle.begin(), shuffle.end(), engine);
+  return shuffle;
 }
 
 //  タスクkが現在取り組むことができるか判定
@@ -106,8 +118,19 @@ void setFinish(int i) {
       if (selectOrder[k].first == 0.0)
         selectOrder[k].first = (double)workingTime[i];
       else {
+#if debugWorkTimeMin
         selectOrder[k].first =
             min(selectOrder[k].first, (double)workingTime[i]);
+#elif debugWorkTimeMax
+        selectOrder[k].first =
+            max(selectOrder[k].first, (double)workingTime[i]);
+        // 1日で終わらせた場合は最優先で割り当てる
+        
+        if (0.0<selectOrder[k].first && selectOrder[k].first<10.0) {
+          selectOrder[k].first = -1.0/selectOrder[k].first;
+          //printf("#s exit!");
+        }
+#endif
       }
 
       //今までの作業にかかった時間の平均値で更新
@@ -155,7 +178,10 @@ void updateProgress(int M) {
 void simpleAssign(int m, int n) {
   //今日作業を開始する人とタスクのペアが入った出力結果
   vector<pair<int, int>> output;
-  rep(i, m) {
+
+  auto shuffle = getRandomVec(m);
+  rep(l, m) {
+    int i = shuffle[l];
     if ((taskAssign[i] < 0) && getTask(i, n)) {
       output.push_back(make_pair(i, taskAssign[i]));
     }
@@ -175,17 +201,36 @@ void assignByFast(int m, int n) {
   //コストが軽い順にソート
   sort(selectOrder.begin(), selectOrder.begin() + m, cmp);
 
+  //何番目までまだ動かしていないか確認
+  int notWorkedMembers = 0;
   rep(i, m) {
+    if (selectOrder[i].first > 0.0) {
+      notWorkedMembers = i;
+      break;
+    }
+  }
+#if debugWorkMember
+  printf("#s 現在 %d人がまだ働いていない\n", notWorkedMembers);
+#endif
+  auto shuffle = getRandomVec(notWorkedMembers);
+
+  rep(l, m) {
+    int i = l;
+    if (l < notWorkedMembers) i = shuffle[l];
+
     int number = selectOrder[i].second;
     if ((taskAssign[number] < 0) && getTask(number, n)) {
       output.push_back(make_pair(number, taskAssign[number]));
     }
   }
 #if debugWorkTime
-  rep(i, m) {
+  rep(l, m) {
+    int i = l;
+    if (l < notWorkedMembers) i = shuffle[l];
     int index = selectOrder[i].second;
 #if debugWorkTimeMax
-    printf("#s メンバー　%d の 最大コストは　%dです\n", index,
+printf("#s i = %d\n",i);
+    printf("#s メンバー　%d の 最大コストは　%lfです\n", index,
            selectOrder[i].first);
 #elif debugWorkTimeMin
     printf("#s メンバー　%d の 最小コストは　%lfです\n", index,
@@ -289,6 +334,9 @@ int main() {
 #if debug
     printf("now status =%d\n", status);
 #endif
+    // printf("#s today %d\n", days);
+    // printf("#s score = %d+%d-%d = %d\n", N, 2000, days, N + 2000 - days);
+
     assignByFast(M, N);
     // simpleAssign(M, N);
 
