@@ -8,20 +8,23 @@ long long mod = 1e9 + 7;
 
 int dx[4] = {1, 0, -1, 0};
 int dy[4] = {0, 1, 0, -1};
+
 #define debug 0
 #define debugWorkTime 0
 #define debugWorkTimeMax 1
 #define debugWorkTimeMin 0
 #define debugWorkTimeAverage 0
+#define sortByMaxMinAve 1
+
 #define debugWorkMember 0
 #define useSample 0
 #define useTestDate 0
+#define setRandonSelect 0
 
 vector<vector<int>> from(1010);
 vector<vector<int>> to(1010);
 
 // skills[i][k]=メンバーi のスキルk
-
 long long skills[25][25];
 
 // timeToNeed[i][k]:=メンバーiがタスクkを終了するまでにかかる日数。
@@ -48,6 +51,35 @@ vector<int> workingTime(25, 0);
 // completedTask[i]:=メンバーiがタスクをクリアした数
 vector<int> completedTask(25, 0);
 
+struct MemberInfo {
+  //タスクに要した時間の最大,最小、平均
+  double WorkTimeMax;
+  double WorkTimeMin;
+  double WorkTimeAve;
+  double nowWorkTime;
+
+  //コンストラクタ
+  MemberInfo() {
+    WorkTimeMin = 1e5;
+    WorkTimeMax = 0.0;
+    WorkTimeAve = 0.0;
+    nowWorkTime = -1.0;
+  }
+  //タスクをアップデート
+  void updateInfo() {}
+
+  double getRateValue() {
+    return WorkTimeAve * 0.1 + WorkTimeMax * 0.3 + WorkTimeMin * 0.3;
+  }
+};
+
+//メンバーを格納する配列
+vector<MemberInfo> Members(25);
+
+//ソートの比較関数
+bool sortMembers(MemberInfo m1, MemberInfo m2) { return true; }
+
+//ソートの比較関数 小さい順にソート
 bool cmp(pair<double, int> p1, pair<double, int> p2) {
   return p1.first < p2.first;
 }
@@ -78,6 +110,7 @@ void makeTasks(int N, int K) {
     rep(l, K) { cin >> taskSkill[i][l]; }
   }
 }
+
 //ランダムな0〜nまでの数列を返す
 vector<int> getRandomVec(int n) {
   vector<int> shuffle(n);
@@ -119,19 +152,39 @@ void setFinish(int i) {
         selectOrder[k].first = (double)workingTime[i];
       else {
 #if debugWorkTimeMin
+
         selectOrder[k].first =
             min(selectOrder[k].first, (double)workingTime[i]);
-#elif debugWorkTimeMax
+#elif 0  // debugWorkTimeMax
+
         selectOrder[k].first =
             max(selectOrder[k].first, (double)workingTime[i]);
-        // 1日で終わらせた場合は最優先で割り当てる
-        
-        if (0.0<selectOrder[k].first && selectOrder[k].first<10.0) {
-          selectOrder[k].first = -1.0/selectOrder[k].first;
-          //printf("#s exit!");
-        }
+#elif sortByMaxMinAve
+        //最小値
+        Members[i].WorkTimeMin =
+            min(Members[i].WorkTimeMin, (double)workingTime[i]);
+        //平均値
+        Members[i].WorkTimeAve =
+            (double)(Members[i].WorkTimeAve * completedTask[i] +
+                     workingTime[i]) /
+            (completedTask[i] + 1.0);
+        //最大値
+        Members[i].WorkTimeMax =
+            max(Members[i].WorkTimeMax, (double)workingTime[i]);
+        selectOrder[k].first = Members[i].getRateValue();
+#if 0
+        // debug用
+        printf("# member %d (Max %lf Min %lf Ave %lf Rate =%lfM )\n",i, Members[i].WorkTimeMax,
+               Members[i].WorkTimeMin, Members[i].WorkTimeAve,
+               Members[i].getRateValue());
+#endif
 #endif
       }
+      // // 10日以内で終わらせた場合は最優先で割り当てる
+      //   if (0.0 < selectOrder[k].first && selectOrder[k].first < 10.0) {
+      //     selectOrder[k].first = -1.0 / selectOrder[k].first;
+      //     // printf("#s exit!");
+      //   }
 
       //今までの作業にかかった時間の平均値で更新
       //   selectOrder[k].first =
@@ -179,7 +232,14 @@ void simpleAssign(int m, int n) {
   //今日作業を開始する人とタスクのペアが入った出力結果
   vector<pair<int, int>> output;
 
-  auto shuffle = getRandomVec(m);
+  vector<int> shuffle(m);
+  //最初の割り当てをランダムに行うとき
+#if setRandonSelect
+  shuffle = getRandomVec(notWorkedMembers);
+#else
+  rep(i, m) shuffle[i] = i;
+#endif
+
   rep(l, m) {
     int i = shuffle[l];
     if ((taskAssign[i] < 0) && getTask(i, n)) {
@@ -212,7 +272,12 @@ void assignByFast(int m, int n) {
 #if debugWorkMember
   printf("#s 現在 %d人がまだ働いていない\n", notWorkedMembers);
 #endif
-  auto shuffle = getRandomVec(notWorkedMembers);
+  vector<int> shuffle(notWorkedMembers);
+#if setRandonSelect
+  shuffle = getRandomVec(notWorkedMembers);
+#else
+  rep(i, notWorkedMembers) shuffle[i] = i;
+#endif
 
   rep(l, m) {
     int i = l;
@@ -229,7 +294,7 @@ void assignByFast(int m, int n) {
     if (l < notWorkedMembers) i = shuffle[l];
     int index = selectOrder[i].second;
 #if debugWorkTimeMax
-printf("#s i = %d\n",i);
+    printf("#s i = %d\n", i);
     printf("#s メンバー　%d の 最大コストは　%lfです\n", index,
            selectOrder[i].first);
 #elif debugWorkTimeMin
@@ -332,7 +397,7 @@ int main() {
     }
 #endif
 #if debug
-    printf("now status =%d\n", status);
+    printf("0 now status =%d\n", status);
 #endif
     // printf("#s today %d\n", days);
     // printf("#s score = %d+%d-%d = %d\n", N, 2000, days, N + 2000 - days);
