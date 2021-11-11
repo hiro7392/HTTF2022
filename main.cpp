@@ -24,11 +24,11 @@ int dy[4] = {0, 1, 0, -1};
 vector<vector<int>> from(1010);
 vector<vector<int>> to(1010);
 
-// skills[i][k]=メンバーi のスキルk
-long long skills[25][25];
+//taskSkill[i][k]:=タスクiに必要な技能k
+double taskSkill[1010][25];
 
 // timeToNeed[i][k]:=メンバーiがタスクkを終了するまでにかかる日数。
-long long timeToNeed[25][1010];
+// long long timeToNeed[25][1010];
 
 // assing[i]:=メンバーiに割り振られたタスク、タスクがなければ-1を入れる
 vector<long long> taskAssign(25);
@@ -50,6 +50,33 @@ vector<int> workingTime(25, 0);
 
 // completedTask[i]:=メンバーiがタスクをクリアした数
 vector<int> completedTask(25, 0);
+
+//タスク同士の類似度
+double similarity[1010][1010] = {};
+
+//タスクxとタスクyの類似度を求める
+// 類似度=cos類似度とする
+double getSim(int x, int y, int k) {
+  double xSumSq = 0.0, ySumSq = 0.0, xySum = 0.0;
+
+  rep(i, k) {
+    xSumSq += taskSkill[x][i];
+    ySumSq += taskSkill[y][i];
+    xySum += taskSkill[x][i] * taskSkill[y][i];
+  }
+  xSumSq = sqrt(xSumSq);
+  ySumSq = sqrt(ySumSq);
+  return xySum / (xSumSq * ySumSq);
+}
+
+//全てのタスク同士の類似度を求める
+void calSimilarity(int n, int k) {
+  for (int i = 0; i < n; i++) {
+    for (int l = i + 1; l < n; l++) {
+      similarity[i][l] = similarity[l][i] = getSim(i, l, k);
+    }
+  }
+}
 
 struct MemberInfo {
   //タスクに要した時間の最大,最小、平均
@@ -105,7 +132,6 @@ void makeDependency(int R) {
 }
 void makeTasks(int N, int K) {
   // taskに必要な技能
-  long long taskSkill[N][K];
   rep(i, N) {
     rep(l, K) { cin >> taskSkill[i][l]; }
   }
@@ -180,16 +206,6 @@ void setFinish(int i) {
 #endif
 #endif
       }
-      // // 10日以内で終わらせた場合は最優先で割り当てる
-      //   if (0.0 < selectOrder[k].first && selectOrder[k].first < 10.0) {
-      //     selectOrder[k].first = -1.0 / selectOrder[k].first;
-      //     // printf("#s exit!");
-      //   }
-
-      //今までの作業にかかった時間の平均値で更新
-      //   selectOrder[k].first =
-      //       (double)(selectOrder[k].first * completedTask[i] +
-      //       workingTime[i]) / (completedTask[i] + 1.0);
       break;
     }
   }
@@ -209,7 +225,7 @@ bool getTask(int i, int n) {
     if (taskIsReady(k)) {
       taskAssign[i] = k;
       onGoing[k] = true;
-      timeUntilFinish[i] = timeToNeed[i][k];
+      // timeUntilFinish[i] = timeToNeed[i][k];
       return true;
     }
   }
@@ -358,6 +374,15 @@ int main() {
   //メンバーを整列させて初期化
   makeSelectOrder(M);
 
+
+  calSimilarity(N, K);
+#if 0
+  for (int i = 0; i < N; i++) {
+    for (int l = i + 1; l < N; l++) {
+      if(similarity[i][l]>9.0)printf("# similarity %d %d = %lf\n", i, l, similarity[i][l]);
+    }
+  }
+#endif
   int status = -1;
   rep(i, M) taskAssign[i] = -1;
 #if useTestDate
@@ -387,6 +412,7 @@ int main() {
     updateProgress(M);
     if (allTasksCompleted(N) || days > 2000) break;
 #else
+    //今日仕事を終えたメンバーを記録
     cin >> status;
     if (status < 0) break;
     rep(i, status) {
