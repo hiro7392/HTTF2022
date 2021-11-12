@@ -22,19 +22,15 @@ int dy[4] = {0, 1, 0, -1};
 #define setRandonSelect 0
 
 vector<vector<int>> from(1010);
-vector<vector<int>> to(1010);
 
 // taskSkill[i][k]:=タスクiに必要な技能k
 double taskSkill[1010][25];
-
-// timeToNeed[i][k]:=メンバーiがタスクkを終了するまでにかかる日数。
-// long long timeToNeed[25][1010];
 
 // assing[i]:=メンバーiに割り振られたタスク、タスクがなければ-1を入れる
 vector<long long> taskAssign(25);
 
 // assing[i]:=タスクiに割り振られたメンバー、メンバがなければ-1を入れる
-vector<long long> memberAssign(25);
+vector<long long> memberAssign(1010);
 
 //メンバー　iがやっている仕事にかかる時間
 vector<long long> timeUntilFinish(25, INF);
@@ -45,21 +41,35 @@ bool finished[1010] = {};
 // 進行中かどうか、進行中ならtrue
 bool onGoing[1010] = {};
 
+// 現在そのタスクに取り組むことができるか
+bool availableTask[1010];
+
+//現在取り組むことのできるタスクのリスト
+vector<int> availableTasks;
+
 // vector<pair<前のタスクにかかった時間,メンバーの番号>>selectOrder
 vector<pair<double, int>> selectOrder(25);
 
+//ソート用
+vector<pair<double, int>> sortTaskByL2norm;
+
+bool cmp(pair<double, int> p1, pair<double, int> p2) {
+  return p1.first < p2.first;
+}
 //現在のタスクにかかっている時間
 vector<int> workingTime(25, 0);
 
 // completedTask[i]:=メンバーiがタスクをクリアした数
 vector<int> completedTask(25, 0);
 
-//タスク同士の類似度
-double similarity[1010][1010] = {};
-
 //タスクiが達成されるのにかかった日数と
 //その仕事をやった人を記録
-vector<pair<int, double>> completeTimeAndMember(1010, make_pair(-1, 1e5));
+// vector<pair<int, double>> completeTimeAndMember(1010);
+
+// finishTimeAndMember[i]:=<かかった日数,タスク番号k>
+//メンバ-iがタスク番号kを達成するのにかかった日数
+//
+vector<multimap<int, int>> finishTimeAndMember(1010);
 
 struct MemberInfo {
   //タスクに要した時間の最大,最小、平均
@@ -82,7 +92,20 @@ struct MemberInfo {
     return WorkTimeAve * 0.1 + WorkTimeMax * 0.3 + WorkTimeMin * 0.3;
   }
 };
+//タスクlのL2ノルムを計算する
+double calL2norm(int l, int k) {
+  double ret = 0.0;
+  rep(i, k) ret += (taskSkill[l][i] * taskSkill[l][i]);
+  return sqrt(ret);
+}
 
+// L2ノルムでソートする
+void sortTasks(int N, int K) {
+  rep(i, N) sortTaskByL2norm.push_back(make_pair(calL2norm(i, K), i));
+
+  sort(sortTaskByL2norm.begin(), sortTaskByL2norm.end(), cmp);
+  return;
+}
 //メンバーを格納する配列
 vector<MemberInfo> Members(25);
 
@@ -90,18 +113,20 @@ vector<MemberInfo> Members(25);
 bool sortMembers(MemberInfo m1, MemberInfo m2) { return true; }
 
 //ソートの比較関数 小さい順にソート
-bool cmp(pair<double, int> p1, pair<double, int> p2) {
-  return p1.first < p2.first;
-}
-//降順にソートする
-bool sortByDown(pair<double, int> p1, pair<double, int> p2) {
-  return p1.first < p2.first;
-}
+// bool cmp(pair<double, int> p1, pair<double, int> p2) {
+//   return p1.first < p2.first;
+// }
+// //降順にソートする
+// bool sortByDown(pair<double, int> p1, pair<double, int> p2) {
+//   return p1.first < p2.first;
+// }
 
 void makeSelectOrder(int m) {
   rep(i, m) selectOrder[i] = make_pair(0.5, i);
   return;
 }
+//タスクの類似度を降順にmapで管理
+vector<multimap<double, int>> taskSimByDown(1010);
 
 //タスクxとタスクyの類似度を求める
 // 類似度=cos類似度とする
@@ -120,20 +145,16 @@ double getSim(int x, int y, int k) {
 
 //全てのタスク同士の類似度を求める
 void calSimilarity(int n, int k) {
+  double sim;
   for (int i = 0; i < n; i++) {
-    for (int l = i + 1; l < n; l++) {
-      similarity[i][l] = similarity[l][i] = getSim(i, l, k);
+    for (int l = 0; l < n; l++) {
+      if (i == l) continue;
+      sim = getSim(i, l, k);
+      //各タスクについて、他のタスクとの類似度をmapに入れておく
+      taskSimByDown[i].insert(make_pair(sim, l));
+      taskSimByDown[l].insert(make_pair(sim, i));
     }
   }
-}
-//タスクiに関する類似度をソートした配列を返す (タスク番号i,タスク数n)
-vector<pair<double, int>> getSimVec(int i, int n) {
-  vector<pair<double, int>> ret;
-  rep(l, n) {
-    if (l != i) ret.push_back(make_pair(similarity[i][l], l));
-  }
-  sort(ret.begin(), ret.end(), sortByDown);
-  return ret;
 }
 
 //依存関係の入力と構築
@@ -145,7 +166,7 @@ void makeDependency(int R) {
     u--, v--;
     //依存関係をtoとfromで表現
     // to[1]=2　の時1->２の依存関係がある
-    to[u].push_back(v);
+    // to[u].push_back(v);
     // from[2]=1の時2->の依存関係がある
     from[v].push_back(u);
   }
@@ -185,72 +206,31 @@ void setFinish(int i) {
   //担当していたタスクの終了を記録
   finished[taskAssign[i]] = true;
   //進行中フラグを閉じる
-  onGoing[taskAssign[i]] = false;
+  // onGoing[taskAssign[i]] = false;
+  
+
   //タスクにかかった時間を記録する
-  completeTimeAndMember[taskAssign[i]] = make_pair(i, (double)workingTime[i]);
-  // printf("#task%d was done by member%d in
-  // %3.0lfdays\n",taskAssign[i],i,completeTimeAndMember[i].second);
-
+  finishTimeAndMember[i].insert(make_pair(workingTime[i], taskAssign[i]));
   //かかった時間を記録
-  rep(k, 25) {
-    if (selectOrder[k].second == i) {
-      //今までの作業にかかった時間の最大値で更新
-      // selectOrder[k].first = max(selectOrder[k].first, workingTime[i]);
-
-      //今までの作業にかかった時間の最小値で更新
-      if (selectOrder[k].first == 0.0)
-        selectOrder[k].first = (double)workingTime[i];
-      else {
-#if debugWorkTimeMin
-
-        selectOrder[k].first =
-            min(selectOrder[k].first, (double)workingTime[i]);
-#elif 0  // debugWorkTimeMax
-
-        selectOrder[k].first =
-            max(selectOrder[k].first, (double)workingTime[i]);
-#elif sortByMaxMinAve
-        //最小値
-        Members[i].WorkTimeMin =
-            min(Members[i].WorkTimeMin, (double)workingTime[i]);
-        //平均値
-        Members[i].WorkTimeAve =
-            (double)(Members[i].WorkTimeAve * completedTask[i] +
-                     workingTime[i]) /
-            (completedTask[i] + 1.0);
-        //最大値
-        Members[i].WorkTimeMax =
-            max(Members[i].WorkTimeMax, (double)workingTime[i]);
-        selectOrder[k].first = Members[i].getRateValue();
-#if 0
-        // debug用
-        printf("# member %d (Max %lf Min %lf Ave %lf Rate =%lfM )\n",i, Members[i].WorkTimeMax,
-               Members[i].WorkTimeMin, Members[i].WorkTimeAve,
-               Members[i].getRateValue());
-#endif
-#endif
-      }
-      break;
-    }
-  }
   //現在こなしたタスク数を増やす
   completedTask[i]++;
   //現在の作業時間を0にする
   workingTime[i] = 0;
   //メンバーiに割り当てられたタスクをからにする
   taskAssign[i] = -1;
+  return;
 }
 
 //空いているタスクがあれば取ってくる、なければfalse
 // メンバーi タスク k
 bool getTask(int i, int n) {
-  rep(k, n) {
+  for (int l = 0; l < n; l++) {
+    int k = sortTaskByL2norm[l].second;
     //タスクkが開始可能であれば割り当てる
     if (taskIsReady(k)) {
       taskAssign[i] = k;
-      memberAssign[k] = i;
+      // memberAssign[k] = i;
       onGoing[k] = true;
-      // timeUntilFinish[i] = timeToNeed[i][k];
       return true;
     }
   }
@@ -309,68 +289,68 @@ void simpleAssign(int m, int n) {
   printf("\n");
 }
 
-//前回のタスクの完了が早い人から優先して採用
-void assignByFastMember(int m, int n) {
-  vector<pair<int, int>> output;
-
-  //コストが軽い順にソート
-  sort(selectOrder.begin(), selectOrder.begin() + m, cmp);
-
-  //何番目のメンバーまでまだタスクをしたことがないか確認
-  int notWorkedMembers = 0;
-  rep(i, m) {
-    if (selectOrder[i].first > 0.0) {
-      notWorkedMembers = i;
-      break;
-    }
-  }
-#if debugWorkMember
-  printf("#s 現在 %d人がまだ働いていない\n", notWorkedMembers);
-#endif
-  vector<int> shuffle(notWorkedMembers);
-#if setRandonSelect
-  shuffle = getRandomVec(notWorkedMembers);
-#else
-  rep(i, notWorkedMembers) shuffle[i] = i;
-#endif
-  //まだ情報がない部分はシャッフルしてランダムに選ぶ
-  rep(l, m) {
-    int i = l;
-    if (l < notWorkedMembers) i = shuffle[l];
-
-    int number = selectOrder[i].second;
-    if ((taskAssign[number] < 0) && getTask(number, n)) {
-      output.push_back(make_pair(number, taskAssign[number]));
-    }
-  }
-
-  //出力用
-  printf("%d ", output.size());
-  for (auto now : output) {
-    printf("%d %d ", now.first + 1, now.second + 1);
-  }
-  printf("\n");
-}
-
+#if 0
 //タスクiについて、類似度が高いタスクを早くこなした
 //メンバーのindexを返す
-int getOptMember(int i, int n) {
+int getOptMember(int i) {
   //メンバーiの他のタスクとの類似度が<double,int>のpairで入ったベクトル
   //降順にソートずみ
-  vector<pair<double, int>> vec = getSimVec(i, n);
+  // vector<pair<double, int>> vec = getSimVec(i, n);
   double threshold = 10.0;
-  rep(l, n - 1) {
-    // now<類似度,タスク番号>
-    pair<double, int> now = vec[l];
-    if (now.second < 0) continue;
+  auto it = taskSimByDown[i].rbegin();
+  int taskIndex;
+  //類似度が高い順にクリアした人が空いているかみていく
+  while (it != taskSimByDown[i].rend()) {
+    taskIndex = it->second;
+    if (!finished[taskIndex]) {
+      it++;
+      continue;
+    }
+    // <類似度,タスク番号>
     //一定時間よりも短い時間で終わらせていて
     //かつその人が今何もしていなければ割り当てる
-    if (completeTimeAndMember[now.second].second < threshold &&
-        (taskAssign[completeTimeAndMember[now.second].first] < 0)) {
-      return completeTimeAndMember[now.second].first;
+    if ((completeTimeAndMember[taskIndex].second < threshold) &&
+        (taskAssign[completeTimeAndMember[taskIndex].first] < 0)) {
+      return completeTimeAndMember[it->second].first;
     }
+    it++;
   }
   return -1;
+}
+#endif
+int getOptTask(int i) {
+  if (finishTimeAndMember[i].empty()) return -1;
+  //メンバーiの他のタスクとの類似度が<double,int>のpairで入ったベクトル
+  //降順にソートずみ
+  double threshold = 10.0;
+
+  int taskIndex;
+  auto it = finishTimeAndMember[i].begin();
+  //メンバーiがやったタスクについてみていく
+  //while (it != finishTimeAndMember[i].end()) {
+    // if (it->first > 10.0) {
+    //   it++;
+    //   continue;
+    // }
+    taskIndex = it->second;
+    // task番号==taskIndex のタスクについて類似度の高いものを取ってくる
+    auto itSim = taskSimByDown[taskIndex].rbegin();
+    while (itSim != taskSimByDown[taskIndex].rend()) {
+      //類似度が高いものを返す
+      if (taskIsReady(itSim->second)) {
+        return itSim->second;
+      }
+      itSim++;
+    }
+    it++;
+  //}
+  return -1;
+}
+void registTaskToMember(int member, int task) {
+  taskAssign[member] = task;
+  memberAssign[task] = member;
+  onGoing[task] = true;
+  return;
 }
 
 //現在取り組めるタスクについて
@@ -378,33 +358,23 @@ int getOptMember(int i, int n) {
 void assignByTaskSimilarity(int m, int n) {
   vector<pair<int, int>> output;  //出力用ベクトル
 
-  //取り組めるタスクについて、割り当てる
-  // rep(task, n) {
-  //   int findGoodMember = getOptMember(task, n);
-  //   //いいメンバーが見つかなかったら-1が帰ってくる
-  //   if (taskIsReady(task) && findGoodMember >= 0) {
-  //     // printf("# assigned 1\n");
-  //     taskAssign[findGoodMember] = task;
-  //     onGoing[task] = true;
-  //     output.push_back(make_pair(findGoodMember, task));
-  //   }
-  // }
-  rep(task, n) {
-    if(!taskIsReady(task))continue;
-
-    int findGoodMember = getOptMember(task, n);
-    //いいメンバーが見つかなかったら-1が帰ってくる
-    if (findGoodMember >= 0) {
-      //printf("# assigned 1\n");
-      taskAssign[findGoodMember] = task;
-      memberAssign[task] = findGoodMember;
-      onGoing[task] = true;
-      output.push_back(make_pair(findGoodMember, task));
-    } else if (taskIsReady(task)) {
-      //作業可能なメンバーがいれば割り当てる
-      if (getMember(task, m)) {
-        //printf("# assigned\n");
-        output.push_back(make_pair(memberAssign[task], task));
+  //空いているメンバーについて割り当てる
+  rep(i, m) {
+    if (taskAssign[i] >= 0)
+      continue;
+    else {
+      //メンバーiについて、
+      //過去に行ったタスクと類似度が高いタスクを取ってくる
+      int taskCand = getOptTask(i);
+      if (taskCand > -1) {
+        registTaskToMember(i, taskCand);
+        output.push_back(make_pair(i, taskCand));
+      } else {
+        if (getTask(i, n)) {
+          // registTaskToMember(i, );
+          output.push_back(make_pair(i, taskAssign[i]));
+          break;
+        }
       }
     }
   }
@@ -431,9 +401,9 @@ void printNowAssignMent(int m) {
   rep(i, m) {
     int taskStatus = taskAssign[i];
     if (taskStatus == -1) {
-      printf("メンバー %d の　進行中のタスクはありません\n", i + 1);
+      printf("#メンバー %d の　進行中のタスクはありません\n", i + 1);
     } else {
-      printf("メンバー %d の　進行中のタスクは　タスク%d です\n", i + 1,
+      printf("#メンバー %d の　進行中のタスクは　タスク%d です\n", i + 1,
              taskStatus + 1);
     }
   }
@@ -447,9 +417,22 @@ bool allTasksCompleted(int n) {
   return true;
 }
 
-//現在のタスクの
+//現在取り組めるタスクを更新
+void updateAvalableTask(int n) {
+  // printf("#update Availtask called!\n");
+  rep(i, n) {
+    if (availableTask[i]) {
+      continue;
+    } else if (taskIsReady(i)) {
+      //すでに追加したものはもう追加しない
+      availableTask[i] = true;
+      availableTasks.push_back(i);
+    }
+  }
+}
 
 int main() {
+  // clock_t start = clock();  // スタート時間
   long long N, M, K, R;
   cin >> N >> M >> K >> R;
 
@@ -459,15 +442,9 @@ int main() {
   makeDependency(R);
   //メンバーを整列させて初期化
   makeSelectOrder(M);
-
+  //タスク間の類似度を計算
   calSimilarity(N, K);
-#if 0
-  for (int i = 0; i < N; i++) {
-    for (int l = i + 1; l < N; l++) {
-      if(similarity[i][l]>9.0)printf("# similarity %d %d = %lf\n", i, l, similarity[i][l]);
-    }
-  }
-#endif
+
   int status = -1;
   rep(i, M) taskAssign[i] = -1;
 #if useTestDate
@@ -484,15 +461,26 @@ int main() {
     }
   }
 #endif
-  //初日の割り当て
-  simpleAssign(M, N);
+  rep(i, N) {
+    finished[i] = false;
+    // availableTask[i] = false;
+  }
+
+  //初日に取り組めるタスクを更新
+  // updateAvalableTask(N);
+
+  //タスクをL2ノルムが小さい順にソート
+  sortTasks(N, K);
+  // //初日の割り当て
+  assignByTaskSimilarity(M, N);
+
   int days = 0;
   while (1) {
     days++;
     //メンバーの労働時間を記録
     registWorkTime(M);
-#if useSample
     //今日の分の進み具合を更新
+#if useSample
     updateProgress(M);
     if (allTasksCompleted(N) || days > 2000) break;
 #else
@@ -505,30 +493,36 @@ int main() {
       finishedMember--;
       setFinish(finishedMember);
     }
+    //取り組めるタスクのリストを更新
+    // if (status > 0) updateAvalableTask(N);
 #endif
 #if debug
     printf("0 now status =%d\n", status);
 #endif
-    // printf("#s today %d\n", days);
-    // printf("#s score = %d+%d-%d = %d\n", N, 2000, days, N + 2000 - days);
-
     //メンバーの仕事が早い順に割り当てていく方法
     // assignByFastMember(M, N);
 
     //何も考えずに番号が若い順にタスクを割り当てる方法
     // simpleAssign(M, N);
 
-    //タスク
+    //タスクをタスク間の類似度に基づいて分類
     assignByTaskSimilarity(M, N);
   }
+  // clock_t end = clock();  // 終了時間
+  // printf("#duration = %lf\n", (double)(end - start) / CLOCKS_PER_SEC);
 #if 0  // debug
   rep(i, N) {
     printf("#task%d was done by member%din%lfdays\n", i,
-           completeTimeAndMember[i].first, completeTimeAndMember[i].second);
+          completeTimeAndMember[i].first, completeTimeAndMember[i].second);
   }
 #endif
 }
 /*
-
+3 2 2 2
+0 1
+2 0
+1 1
+1 2
+2 3
 
 */
